@@ -4,67 +4,127 @@
 \alias{delaunay}
 \title{2D Delaunay triangulation}
 \usage{
-delaunay(points, edges = NULL)
+delaunay(points, edges = NULL, elevation = FALSE)
 }
 \arguments{
-\item{points}{a numeric matrix with two columns}
+\item{points}{a numeric matrix with two or three columns (three colums for 
+an elevated Delaunay triangulation)}
 
 \item{edges}{the edges for the constrained Delaunay triangulation, 
 an integer matrix with two columns; \code{NULL} for no constraint}
+
+\item{elevation}{Boolean, whether to perform an elevate Delaunay 
+triangulation (also known as 2.5D Delaunay triangulation)}
 }
 \value{
-A list. It has two fields for an unconstrained Delaunay trianguation: 
- \strong{triangles}, an integer matrix with three columns, it provides 
- the indices of the vertices of the Delaunay triangles, and a field 
- \strong{allEdges}, which is an integer matrix with two columns, providing 
- the indices of all the edges of the triangulation. For a constrained 
- Delaunay tessellation, there is an additional field \strong{borderEdges}, 
- an integer matrix with two columns, providing the indices of the edges 
- given as constraints.
+A list. There are three possibilities.
+#' \itemize{
+  \item \strong{If the dimension is 2} and \code{edges=NULL},
+        the returned value is a list with two fields:
+        \code{mesh} and \code{edges}. 
+        The \code{mesh} field is an object of
+        class \code{\link[rgl]{mesh3d}}, ready for plotting with the 
+        \strong{rgl} package. 
+        The \code{edges} field provides the indices of the vertices of the 
+        edges, given by the first two columns of a three-columns integer 
+        matrix. 
+        The third column, named \code{border}, only contains some
+        zeros and some ones; a border (exterior) edge is labelled by a
+        \code{1}. 
+  \item \strong{If the dimension is 2} and \code{edges} is not
+        \code{NULL}, the returned value is a list with
+        three fields: \code{mesh}, \code{edges}, and \code{constraints}. 
+        The \code{mesh} and \code{edges} fields are similar to the previous 
+        case, the unconstrained Delaunay triangulation. 
+        The \code{constraints} field is an integer matrix with
+        two columns, it represents the constraint edges. Note that in 
+        general these are the same edges as the ones provided by the user,
+        but not always, in some rare corner cases.
+  \item \strong{If} \code{elevation=TRUE}, the returned value is a list with
+        four fields: \code{mesh}, \code{edges}, \code{volume}, 
+        and \code{surface}. The \code{mesh} field is an object of
+        class \code{\link[rgl]{mesh3d}}, ready for plotting with the 
+        \strong{rgl} package. The \code{edges} field is similar to the 
+        previous cases. 
+        The \code{volume} field provides a number, the sum of the volumes 
+        under the Delaunay triangles, that is to say the total volume
+        under the triangulated surface. Finally, the \code{surface} field
+        provides the sum of the areas of all triangles, thereby
+        approximating the area of the triangulated surface.
+}
 }
 \description{
 Performs a (constrained) Delaunay triangulation of a set of 
   2d points.
 }
+\note{
+The triangulation can depend on the order of the points; this is 
+  shown in the examples.
+}
 \examples{
-# random points in a square
-set.seed(314)
 library(RCDT)
+# random points in a square ####
+set.seed(314)
 library(uniformly)
 square <- rbind(
   c(-1, 1), c(1, 1), c(1, -1), c(-1, -1)
 )
-ptsin <- runif_in_cube(10L, d = 2L)
-pts <- rbind(square, ptsin)
+pts_in_square <- runif_in_cube(10L, d = 2L)
+pts <- rbind(square, pts_in_square)
 del <- delaunay(pts)
 opar <- par(mar = c(0, 0, 0, 0))
 plotDelaunay(
-  del, xlab = NA, ylab = NA, asp = 1, color = "random", luminosity = "dark"
+  del, type = "n", xlab = NA, ylab = NA, asp = 1, 
+  fillcolor = "random", luminosity = "light", lty_edges = "dashed"
 )
 par(opar)
 
-# a constrained Delaunay triangulation ####
+# the order of the points matters ####
+# the Delaunay triangulation is not unique in general; 
+#   it can depend on the order of the points
+points <- cbind(
+  c(1, 2, 1, 3, 2, 1, 4, 3, 2, 1, 4, 3, 2, 4, 3, 4),
+  c(1, 1, 2, 1, 2, 3, 1, 2, 3, 4, 2, 3, 4, 3, 4, 4)
+)
+del <- delaunay(points)
+opar <- par(mar = c(0, 0, 0, 0))
+plotDelaunay(
+  del, type = "p", pch = 19, xlab = NA, ylab = NA, axes = FALSE, 
+  asp = 1, lwd_edges = 2, lwd_borders = 3
+)
+par(opar)
+# now we randomize the order of the points
+set.seed(666L)
+points2 <- points[sample.int(nrow(points)), ]
+del2 <- delaunay(points2)
+opar <- par(mar = c(0, 0, 0, 0))
+plotDelaunay(
+  del2, type = "p", pch = 19, xlab = NA, ylab = NA, axes = FALSE, 
+  asp = 1, lwd_edges = 2, lwd_borders = 3
+)
+par(opar)
+
+# a constrained Delaunay triangulation: outer and inner dodecagons ####
 # points
-nangles <- 12L
-angles <- seq(0, 2*pi, length.out = nangles+1L)[-1L]
+nsides <- 12L
+angles <- seq(0, 2*pi, length.out = nsides+1L)[-1L]
 points <- cbind(cos(angles), sin(angles))
 points <- rbind(points, points/1.5)
-
 # constraint edges
-indices <- 1L:nangles
-edges <- cbind(
-  indices,
-  c(indices[-1L], indices[1L])
-) 
-edges <- rbind(edges, edges + nangles)
-
-# Delaunay
+indices <- 1L:nsides
+edges_outer <- cbind(
+  indices, c(indices[-1L], indices[1L])
+)
+edges_inner <- edges_outer + nsides
+edges <- rbind(edges_outer, edges_inner)
+# constrained Delaunay triangulation
 del <- delaunay(points, edges) 
-
 # plot
-opar <- par(mar = c(1, 1, 1, 1))
-plotDelaunay(del, color = "yellow", lwd_borders = 2, asp = 1, 
-             axes = FALSE, xlab = NA, ylab = NA)
+opar <- par(mar = c(0, 0, 0, 0))
+plotDelaunay(
+  del, type = "n", fillcolor = "yellow", lwd_borders = 2, asp = 1, 
+  axes = FALSE, xlab = NA, ylab = NA
+)
 par(opar)
 
 # another constrained Delaunay triangulation: a face ####
@@ -77,10 +137,12 @@ E <- read.table(
 del <- delaunay(
   points = as.matrix(V)[, c(2L, 3L)], edges = as.matrix(E)[, c(2L, 3L)]
 )
-opar <- par(mar = c(1, 1, 1, 1))
+opar <- par(mar = c(0, 0, 0, 0))
 plotDelaunay(
-  del, col_edges = NULL, color = "salmon", col_borders = "black", asp = 1,
-  axes = FALSE, xlab = NA, ylab = NA
+  del, type="n", col_edges = NULL, fillcolor = "salmon", 
+  col_borders = "black", col_constraints = "purple", 
+  lwd_borders = 3, lwd_constraints = 3,
+  asp = 1, axes = FALSE, xlab = NA, ylab = NA
 )
 par(opar)
 }

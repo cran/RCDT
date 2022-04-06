@@ -12,7 +12,7 @@ The ‘RCDT’ package - constrained 2D Delaunay triangulation
 
 ``` r
 # vertices
-R <- sqrt((5-sqrt(5))/10)     # outer radius
+R <- sqrt((5-sqrt(5))/10)     # outer circumradius
 r <- sqrt((25-11*sqrt(5))/10) # circumradius of the inner pentagon
 X <- R * vapply(0L:4L, function(i) cos(pi/180 * (90+72*i)), numeric(1L))
 Y <- R * vapply(0L:4L, function(i) sin(pi/180 * (90+72*i)), numeric(1L))
@@ -33,12 +33,12 @@ vertices <- rbind(
 ```
 
 ``` r
-# edge indices
+# edge indices (pairs)
 edges <- cbind(1L:10L, c(2L:10L, 1L))
 ```
 
 ``` r
-# Delaunay triangulation
+# constrained Delaunay triangulation
 library(RCDT)
 del <- delaunay(vertices, edges)
 ```
@@ -46,8 +46,10 @@ del <- delaunay(vertices, edges)
 ``` r
 # plot
 opar <- par(mar = c(0, 0, 0, 0))
-plotDelaunay(del, asp = 1, color = "distinct", lwd_borders = 3,
-             xlab = NA, ylab = NA, axes = FALSE)
+plotDelaunay(
+  del, type = "n", asp = 1, fillcolor = "distinct", lwd_borders = 3,
+  xlab = NA, ylab = NA, axes = FALSE
+)
 par(opar)
 ```
 
@@ -100,18 +102,118 @@ del <- delaunay(vertices, edges)
 ``` r
 opar <- par(mar = c(0, 0, 0, 0))
 plotDelaunay(
-  del, asp = 1, color = "distinct", col_borders = "navy", lty_edges = 2, 
-  lwd_borders = 3, lwd_edges = 2, xlab = NA, ylab = NA, axes = FALSE)
+  del, type = "n", asp = 1, fillcolor = "distinct", 
+  col_borders = "navy", lty_edges = 2, lwd_borders = 3, lwd_edges = 2, 
+  xlab = NA, ylab = NA, axes = FALSE
+)
 par(opar)
 ```
 
 ![](https://raw.githubusercontent.com/stla/RCDT/main/inst/images/eight-pointed_star.png)
+
+## Triangulation of a polygon with a hole
+
+``` r
+n <- 100L # outer number of sides
+angles1 <- seq(0, 2*pi, length.out = n + 1L)[-1L]
+outer_points <- cbind(cos(angles1), sin(angles1))
+m <- 10L  # inner number of sides
+angles2 <- seq(0, 2*pi, length.out = m + 1L)[-1L]
+inner_points <- 0.5 * cbind(cos(angles2), sin(angles2))
+points <- rbind(outer_points, inner_points)
+# constraint edges
+indices <- 1L:n
+edges_outer <- cbind(
+  indices, c(indices[-1L], indices[1L])
+)
+indices <- n + 1L:m
+edges_inner <- cbind(
+  indices, c(indices[-1L], indices[1L])
+)
+edges <- rbind(edges_outer, edges_inner)
+# constrained Delaunay triangulation
+del <- delaunay(points, edges) 
+```
+
+``` r
+# plot
+opar <- par(mar = c(0, 0, 0, 0))
+plotDelaunay(
+  del, type = "n", asp = 1, lwd_borders = 3, col_borders = "black", 
+  fillcolor = "random", luminosity = "dark", col_edges = "yellow",
+  axes = FALSE, xlab = NA, ylab = NA
+)
+par(opar)
+```
+
+![](https://raw.githubusercontent.com/stla/RCDT/main/inst/images/polygonWithHole.png)
+
+One can also enter a vector of colors in the `fillcolor` argument.
+First, see the number of triangles:
+
+``` r
+del[["mesh"]]
+##  mesh3d object with 110 vertices, 110 triangles.
+```
+
+There are 110 triangles. Let’s make a cyclic vector of 110 colors:
+
+``` r
+colors <- viridisLite::viridis(55)
+colors <- c(colors, rev(colors))
+```
+
+And let’s plot now:
+
+``` r
+opar <- par(mar = c(0, 0, 0, 0))
+plotDelaunay(
+  del, type = "n", asp = 1, lwd_borders = 3, col_borders = "black", 
+  fillcolor = colors, col_edges = "black", lwd_edges = 1.5,
+  axes = FALSE, xlab = NA, ylab = NA
+)
+par(opar)
+```
+
+![](https://raw.githubusercontent.com/stla/RCDT/main/inst/images/polygonWithHoleViridis.png)
+
+The colors are assigned to the triangles in the order they are given,
+but only after the triangles have been circularly ordered.
+
+## A funny curve
+
+I found this curve
+[here](https://health.ahs.upei.ca/KubiosHRV/MCR/toolbox/matlab/demos/html/demoDelaunayTri.html#19).
+
+``` r
+t_ <- seq(-pi, pi, length.out = 193L)[-1L]
+r_ <- 0.1 + 5*sqrt(cos(6*t_)^2 + 0.7^2)
+xy <- cbind(r_*cos(t_), r_*sin(t_))
+edges1 <- cbind(1L:192L, c(2L:192L, 1L))
+inner <- which(r_ == min(r_))
+edges2 <- cbind(inner, c(tail(inner, -1L), inner[1L]))
+del <- delaunay(xy, edges = rbind(edges1, edges2))
+```
+
+``` r
+opar <- par(mar = c(0, 0, 0, 0))
+plotDelaunay(
+  del, type = "n", col_borders = "black", lwd_borders = 2, 
+  fillcolor = "random", luminosity = "dark", col_edges = "white", 
+  axes = FALSE, xlab = NA, ylab = NA, asp = 1
+)
+polygon(xy[inner, ], col = "#ffff99")
+par(opar)
+```
+
+![](https://raw.githubusercontent.com/stla/RCDT/main/inst/images/sunCurve.png)
 
 ## License
 
 The ‘RCDT’ package as a whole is distributed under GPL-3 (GNU GENERAL
 PUBLIC LICENSE version 3).
 
-It uses the C++ library [CDT](https://github.com/artem-ogre/CDT). A copy
-of the ‘CDT’ license is provided in the file **LICENSE.note**, and the
-source code of this library can be found in the **src** folder.
+It uses the C++ library [CDT](https://github.com/artem-ogre/CDT) which
+is permissively licensed under MPL-2.0. A copy of the ‘CDT’ license is
+provided in the file **LICENSE.note**, and the source code of this
+library can be found in the **src** folder.
