@@ -6,14 +6,15 @@
 #'   an elevated Delaunay triangulation)
 #' @param edges the edges for the constrained Delaunay triangulation, 
 #'   an integer matrix with two columns; \code{NULL} for no constraint
-#' @param elevation Boolean, whether to perform an elevate Delaunay 
+#' @param elevation Boolean, whether to perform an elevated Delaunay 
 #'   triangulation (also known as 2.5D Delaunay triangulation)
 #'
 #' @return A list. There are three possibilities.
 #' #' \itemize{
 #'   \item \strong{If the dimension is 2} and \code{edges=NULL},
-#'         the returned value is a list with two fields:
-#'         \code{mesh} and \code{edges}. 
+#'         the returned value is a list with three fields:
+#'         \code{vertices}, \code{mesh} and \code{edges}.
+#'         The \code{vertices} field contains the given vertices.  
 #'         The \code{mesh} field is an object of
 #'         class \code{\link[rgl]{mesh3d}}, ready for plotting with the 
 #'         \strong{rgl} package. 
@@ -24,18 +25,25 @@
 #'         zeros and some ones; a border (exterior) edge is labelled by a
 #'         \code{1}. 
 #'   \item \strong{If the dimension is 2} and \code{edges} is not
-#'         \code{NULL}, the returned value is a list with
-#'         three fields: \code{mesh}, \code{edges}, and \code{constraints}. 
+#'         \code{NULL}, the returned value is a list with four fields: 
+#'         \code{vertices}, \code{mesh}, \code{edges}, and \code{constraints}. 
+#'         The \code{vertices} field contains the vertices of the triangulation. 
+#'         They coincide with the given vertices if the constraint edges do not 
+#'         intersect; otherwise there are the intersections in addition to the 
+#'         given vertices.
 #'         The \code{mesh} and \code{edges} fields are similar to the previous 
 #'         case, the unconstrained Delaunay triangulation. 
 #'         The \code{constraints} field is an integer matrix with
-#'         two columns, it represents the constraint edges. Note that in 
-#'         general these are the same edges as the ones provided by the user,
+#'         two columns, it represents the constraint edges. They are not the 
+#'         same as the ones provided by the user if these ones intersect. 
+#'         If they do not intersect, then in general these are the same,
 #'         but not always, in some rare corner cases.
 #'   \item \strong{If} \code{elevation=TRUE}, the returned value is a list with
-#'         four fields: \code{mesh}, \code{edges}, \code{volume}, 
-#'         and \code{surface}. The \code{mesh} field is an object of
-#'         class \code{\link[rgl]{mesh3d}}, ready for plotting with the 
+#'         five fields: \code{vertices}, \code{mesh}, \code{edges}, 
+#'         \code{volume}, and \code{surface}. 
+#'         The \code{vertices} field contains the given vertices.       
+#'         The \code{mesh} field is an object of class 
+#'         \code{\link[rgl]{mesh3d}}, ready for plotting with the 
 #'         \strong{rgl} package. The \code{edges} field is similar to the 
 #'         previous cases. 
 #'         The \code{volume} field provides a number, the sum of the volumes 
@@ -171,15 +179,14 @@ delaunay <- function(points, edges = NULL, elevation = FALSE){
     if(anyDuplicated(xy)){
       stop("There are some duplicated points.", call. = TRUE)
     }
-    cpp <- Rcpp_delaunay(xy)
-    Triangles <- cpp[["triangles"]]
+    Triangles <- Rcpp_delaunay(t(xy))
     vertices <- points[o, ]
     mesh <- tmesh3d(
       vertices = t(vertices),
-      indices = t(Triangles),
+      indices = Triangles,
       homogeneous = FALSE
     )
-    volumes_and_areas <- apply(Triangles, 1L, function(trgl){
+    volumes_and_areas <- apply(Triangles, 2L, function(trgl){
       trgl <- vertices[trgl, ]
       c(
         volume_under_triangle(trgl[, 1L], trgl[, 2L], trgl[, 3L]),
@@ -187,12 +194,13 @@ delaunay <- function(points, edges = NULL, elevation = FALSE){
       )
     })
     out <- list(
-      "mesh"    = mesh,
-      "edges"   = `colnames<-`(
+      "vertices" = vertices,
+      "mesh"     = mesh,
+      "edges"    = `colnames<-`(
         as.matrix(vcgGetEdge(mesh))[, -3L], c("v1", "v2", "border")
       ),
-      "volume"  = sum(volumes_and_areas[1L, ]),
-      "surface" = sum(volumes_and_areas[2L, ])
+      "volume"   = sum(volumes_and_areas[1L, ]),
+      "surface"  = sum(volumes_and_areas[2L, ])
     )
     attr(out, "elevation") <- TRUE
     class(out) <- "delaunay"
@@ -202,18 +210,20 @@ delaunay <- function(points, edges = NULL, elevation = FALSE){
     stop("There are some duplicated points.", call. = TRUE)
   }
   storage.mode(points) <- "double"
+  tpoints <- t(points)
   if(is.null(edges)){
-    cpp <- Rcpp_delaunay(points)
+    triangles <- Rcpp_delaunay(tpoints)
     mesh <- tmesh3d(
-      vertices = rbind(t(points), 0),
-      indices = t(cpp[["triangles"]])
+      vertices = rbind(tpoints, 0),
+      indices = triangles
     )
     Edges <- `colnames<-`(
       as.matrix(vcgGetEdge(mesh))[, c(1L, 2L, 4L)], c("v1", "v2", "border")
     )
     out <- list(
-      "mesh"  = mesh,
-      "edges" = Edges
+      "vertices" = points,
+      "mesh"     = mesh,
+      "edges"    = Edges
     )
   }else{
     if(!is.matrix(edges) || !is.numeric(edges) || ncol(edges) != 2L){
@@ -235,22 +245,34 @@ delaunay <- function(points, edges = NULL, elevation = FALSE){
     if(any(edges[, 1L] == edges[, 2L])){
       stop("There are some invalid constraint edges.", call. = TRUE)
     }
-    cpp <- Rcpp_constrained_delaunay(points, edges)
-    mesh <- tmesh3d(
-      vertices = rbind(t(points), 0),
-      indices = t(cpp[["triangles"]])
-    )
-    Edges <- `colnames<-`(
-      as.matrix(vcgGetEdge(mesh))[, c(1L, 2L, 4L)], c("v1", "v2", "border")
-    )
+    cpp <- Rcpp_constrained_delaunay(tpoints, t(edges))
+    triangles <- cpp[["triangles"]]
+    storage.mode(triangles) <- "integer"
+    Vertices <- cpp[["vertices"]]
+    if(ncol(triangles) == 0L){
+      mesh <- NULL
+      Edges <- `colnames<-`(
+        matrix(integer(0L), nrow = 0L, ncol = 3L), c("v1", "v2", "border")
+      )
+    }else{
+      mesh <- tmesh3d(
+        vertices = rbind(Vertices, 0),
+        indices = triangles
+      )
+      Edges <- `colnames<-`(
+        as.matrix(vcgGetEdge(mesh))[, c(1L, 2L, 4L)], c("v1", "v2", "border")
+      )
+    }
+    borderEdges <- cpp[["borderEdges"]]
+    storage.mode(borderEdges) <- "integer" 
     out <- list(
       "mesh"        = mesh,
+      "vertices"    = t(Vertices),
       "edges"       = Edges,
-      "constraints" = cpp[["borderEdges"]]
+      "constraints" = t(borderEdges)
     )
     attr(out, "constrained") <- TRUE
   }
-  attr(out, "vertices") <- points
   class(out) <- "delaunay"
   out
 }
@@ -295,8 +317,14 @@ delaunayArea <- function(del){
       call. = TRUE
     )
   }
-  triangles <- del[["mesh"]][["it"]]
-  vertices <- attr(del, "vertices")
+  mesh <- del[["mesh"]]
+  if(is.null(mesh)){
+    stop(
+      "This Delaunay triangulation is empty.", call. = TRUE
+    )
+  }
+  triangles <- mesh[["it"]]
+  vertices <- del[["vertices"]]
   ntriangles <- ncol(triangles)
   areas <- numeric(ntriangles)
   for(i in 1L:ntriangles){
