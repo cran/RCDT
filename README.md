@@ -3,7 +3,7 @@ The ‘RCDT’ package - constrained 2D Delaunay triangulation
 
 <!-- badges: start -->
 
-[![R-CMD-check](https://github.com/stla/RCDT/workflows/R-CMD-check/badge.svg)](https://github.com/stla/RCDT/actions)
+[![R-CMD-check](https://github.com/stla/RCDT/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/stla/RCDT/actions/workflows/R-CMD-check.yaml)
 <!-- badges: end -->
 
 ![](https://raw.githubusercontent.com/stla/RCDT/main/inst/images/CDT.png)
@@ -140,7 +140,7 @@ del <- delaunay(points, edges)
 opar <- par(mar = c(0, 0, 0, 0))
 plotDelaunay(
   del, type = "n", asp = 1, lwd_borders = 3, col_borders = "black", 
-  fillcolor = "random", luminosity = "dark", col_edges = "yellow",
+  fillcolor = "random", col_edges = "yellow",
   axes = FALSE, xlab = NA, ylab = NA
 )
 par(opar)
@@ -199,7 +199,7 @@ del <- delaunay(xy, edges = rbind(edges1, edges2))
 opar <- par(mar = c(0, 0, 0, 0))
 plotDelaunay(
   del, type = "n", col_borders = "black", lwd_borders = 2, 
-  fillcolor = "random", luminosity = "dark", col_edges = "white", 
+  fillcolor = "random", col_edges = "white", 
   axes = FALSE, xlab = NA, ylab = NA, asp = 1
 )
 polygon(xy[inner, ], col = "#ffff99")
